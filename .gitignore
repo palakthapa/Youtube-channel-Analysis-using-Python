@@ -1,160 +1,140 @@
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-*$py.class
+# # Youtube channel analysis
+pip install --upgrade google-api-python-client
+import pandas as pd
+from googleapiclient.discovery import build
+import seaborn as sns
 
-# C extensions
-*.so
+api_key="AIzaSyDffLbtCHpmlG5QnJkW4chzzBEGPtxWpM0"
+channel_ids=["UCnz-ZXXER4jOvuED5trXfEA",#TechTFQ
+           "UCpQ34afVgk8cRQBjSJ1xuJQ",#madfit
+           "UCneyi-aYq4VIBYIAQgWmk_w",#RanveerAllahbadia
+           "UCPxMZIFE856tbTfdkdjzTSQ",#beerbiceps
+           "UCQTmoQ_S26PlmDoXujZpbYQ"#timkim
+           ]
 
-# Distribution / packaging
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
+youtube = build("youtube","v3",developerKey=api_key)
 
-# PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
-*.manifest
-*.spec
 
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
+# # function to get channel statistics
+# exract the channel details
+def get_channel_stats(youtube,channel_ids):
+    all_data=[]
+    request = youtube.channels().list(
+        part="snippet,contentDetails,statistics",
+        id=','.join(channel_ids))
+    response = request.execute()
+    
+    for i in range(len(response["items"])):
+        data = dict(channel_name=response["items"][i]['snippet']["title"],
+                  subsribers=response["items"][i]['statistics']["subscriberCount"],
+                  views= response["items"][i]['statistics']["viewCount"],
+                  total_videos= response["items"][i]['statistics']["videoCount"],
+                  playlist_id=response["items"][i]['contentDetails']["relatedPlaylists"]["uploads"])
+        all_data.append(data)
+    return all_data
+channel_statistics=get_channel_stats(youtube,channel_ids)
+channel_data=pd.DataFrame(channel_statistics)
+channel_data
 
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py,cover
-.hypothesis/
-.pytest_cache/
-cover/
+channel_data["subsribers"]=pd.to_numeric(channel_data["subsribers"])
+channel_data["views"]=pd.to_numeric(channel_data["views"])
+channel_data["total_videos"]=pd.to_numeric(channel_data["total_videos"])
+channel_data
+channel_data.dtypes
+sns.set(rc={"figure.figsize":(7,4)})
+ax=sns.barplot(x="channel_name",y="subsribers",data=channel_data)
 
-# Translations
-*.mo
-*.pot
+sns.set(rc={"figure.figsize":(7,4)})
+ax=sns.barplot(x="channel_name",y="views",data=channel_data)
 
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
+sns.set(rc={"figure.figsize":(7,4)})
+ax=sns.barplot(x="channel_name",y="total_videos",data=channel_data)
 
-# Flask stuff:
-instance/
-.webassets-cache
+playlist_id=channel_data.loc[channel_data['channel_name']=="BeerBiceps","playlist_id"].iloc[0]
+playlist_id
 
-# Scrapy stuff:
-.scrapy
+##function to get video id
+def get_video_ids(youtube,playlist_id):
+    
+    request=youtube.playlistItems().list(
+        part="contentDetails",
+        playlistId=playlist_id,
+        maxResults=50)
+    response=request.execute()
+    
+    video_ids=[]
+    for i in range(len(response["items"])):
+        video_ids.append(response["items"][i]["contentDetails"]["videoId"])
+        
+    next_page_token=response.get("nextPageToken")
+    more_pages=True
+    
+    while more_pages:
+        if next_page_token is None:
+            more_pages=False
+        else:
+            request=youtube.playlistItems().list(
+                part="contentDetails",
+                playlistId=playlist_id,
+                maxResults=50,
+                pageToken=next_page_token)
+            response=request.execute()
+            
+            for i in range(len(response["items"])):
+                video_ids.append(response["items"][i]["contentDetails"]["videoId"])
+                
+            next_page_token=response.get("nextPageToken")
+    return (video_ids)
 
-# Sphinx documentation
-docs/_build/
+video_ids = get_video_ids(youtube,playlist_id)
+video_ids
 
-# PyBuilder
-.pybuilder/
-target/
+# # functions to get video details
+def get_video_details(youtube,video_ids):
+    all_video_stats=[]
+    
+    for i in range(0,len(video_ids),50):
+        request = youtube.videos().list(
+                part="snippet,statistics",
+                id=','.join(video_ids[i:i+50]))
+        response = request.execute()
+        
+        for video in response['items']:
+            video_stats=dict(Title=video['snippet']['title'],
+                                    Published_date=video["snippet"]['publishedAt'],
+                                    Views=video['statistics']['viewCount'],
+                                    likes=video['statistics']['likeCount'],
+                                    comments=video['statistics']['commentCount'])
+            
+            all_video_stats.append(video_stats)
+            
+    return (all_video_stats)
 
-# Jupyter Notebook
-.ipynb_checkpoints
+video_details=get_video_details(youtube,video_ids)
+video_data=pd.DataFrame(video_details)
+video_data
 
-# IPython
-profile_default/
-ipython_config.py
+video_data["Published_date"]=pd.to_datetime(video_data["Published_date"]).dt.date
+video_data["Views"]=pd.to_numeric(video_data["Views"])
+video_data["likes"]=pd.to_numeric(video_data["likes"])
+video_data["comments"]=pd.to_numeric(video_data["comments"])
+video_data
 
-# pyenv
-#   For a library or package, you might want to ignore these files since the code is
-#   intended to run in multiple environments; otherwise, check them in:
-# .python-version
+top10_videos=video_data.sort_values(by=["Views"],ascending=False).head(10)
+top10_videos
 
-# pipenv
-#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
-#   However, in case of collaboration, if having platform-specific dependencies or dependencies
-#   having no cross-platform support, pipenv may install dependencies that don't work, or not
-#   install all needed dependencies.
-#Pipfile.lock
+ax1=sns.barplot(x="Views",y="Title",data=top10_videos)
 
-# poetry
-#   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.
-#   This is especially recommended for binary packages to ensure reproducibility, and is more
-#   commonly ignored for libraries.
-#   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
-#poetry.lock
+video_data
+video_data["Month"]=pd.to_datetime(video_data["Published_date"]).dt.strftime('%b')
+video_data
 
-# pdm
-#   Similar to Pipfile.lock, it is generally recommended to include pdm.lock in version control.
-#pdm.lock
-#   pdm stores project-wide configurations in .pdm.toml, but it is recommended to not include it
-#   in version control.
-#   https://pdm.fming.dev/#use-with-ide
-.pdm.toml
+videos_per_month=video_data.groupby('Month',as_index=False).size()
+videos_per_month
 
-# PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
-__pypackages__/
+sort_order=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
 
-# Celery stuff
-celerybeat-schedule
-celerybeat.pid
+videos_per_month.index=pd.CategoricalIndex(videos_per_month["Month"],categories=sort_order,ordered=True)
+videos_per_month=videos_per_month.sort_index()
 
-# SageMath parsed files
-*.sage.py
-
-# Environments
-.env
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-
-# Spyder project settings
-.spyderproject
-.spyproject
-
-# Rope project settings
-.ropeproject
-
-# mkdocs documentation
-/site
-
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# Pyre type checker
-.pyre/
-
-# pytype static type analyzer
-.pytype/
-
-# Cython debug symbols
-cython_debug/
-
-# PyCharm
-#  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
-#  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
-#  and can be added to the global gitignore or merged into this file.  For a more nuclear
-#  option (not recommended) you can uncomment the following to ignore the entire idea folder.
-#.idea/
+ax2=sns.barplot(x="Month",y="size",data=videos_per_month)
