@@ -1,4 +1,5 @@
 #Youtube-channel-Analysis-using-Python
+
 This project presents a comprehensive analysis of several YouTube channels using Python and Seaborn. The analysis aims to provide insights into the content trends and performance metrics of five to six YouTubers' channels.The primary questions addressed in this analysis include:
 
 Video Count: How many videos are available on each channel?
